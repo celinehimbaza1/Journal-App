@@ -1,9 +1,7 @@
-// pages/dashboard.tsx
-import { useContext, useEffect, useState } from "react";
-import { withAuth } from "../lib/withAuth";
-import { auth } from "../lib/firebase";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { AuthContext } from "../lib/AuthContext"; // ✅ Make sure you have this file exporting the context
+import { auth } from "../lib/firebase";
+import { onAuthStateChanged, signOut, getIdToken } from "firebase/auth";
 
 interface Entry {
   id: string;
@@ -12,87 +10,99 @@ interface Entry {
   createdAt: string;
 }
 
-function Dashboard() {
-  const user = useContext(AuthContext); // ✅ Correct context usage
+export default function Dashboard() {
+  const [user, setUser] = useState<any>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-
   const router = useRouter();
 
-  const fetchEntries = async () => {
-    const token = await user?.getIdToken();
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        router.push("/login");
+      } else {
+        setUser(user);
+        fetchEntries(user);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const fetchEntries = async (user: any) => {
+    const token = await getIdToken(user);
     const res = await fetch("/api/entries", {
       headers: {
-        Authorization: `Bearer ${token}`, // ✅ Corrected template literal
+        Authorization: `Bearer ${token}`,
       },
     });
+
     const data = await res.json();
     setEntries(data);
   };
 
-  const handleAdd = async () => {
+  const handleAddEntry = async () => {
     if (!title || !body) return;
-    const token = await user?.getIdToken();
-    await fetch("/api/entries", {
+    const token = await getIdToken(user);
+
+    const res = await fetch("/api/entries", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`, // ✅ Corrected template literal
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ title, body }),
     });
+
+    const newEntry = await res.json();
+    setEntries([newEntry, ...entries]);
     setTitle("");
     setBody("");
-    fetchEntries();
   };
 
   const handleDelete = async (id: string) => {
-    const token = await user?.getIdToken();
+    const token = await getIdToken(user);
     await fetch(`/api/entries/${id}`, {
       method: "DELETE",
       headers: {
-        Authorization: `Bearer ${token}`, // ✅ Corrected template literal
+        Authorization: `Bearer ${token}`,
       },
     });
-    fetchEntries();
+
+    setEntries(entries.filter((entry) => entry.id !== id));
   };
 
-  const handleLogout = () => {
-    auth.signOut();
+  const logout = async () => {
+    await signOut(auth);
     router.push("/login");
   };
 
-  useEffect(() => {
-    if (user) fetchEntries();
-  }, [user]);
-
   return (
-    <div style={{ maxWidth: "600px", margin: "auto", padding: 20 }}>
-      <h1>Welcome {user?.displayName}</h1>
-      <button onClick={handleLogout}>Logout</button>
+    <div style={{ padding: 20 }}>
+      <h1>Welcome to Your Journal</h1>
+      <button onClick={logout} style={{ marginBottom: 20 }}>
+        Logout
+      </button>
 
-      <h2>Add Entry</h2>
-      <input
-        placeholder="Title"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        style={{ width: "100%", marginBottom: 10 }}
-      />
-      <textarea
-        placeholder="Body"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        style={{ width: "100%", height: 100 }}
-      />
-      <button onClick={handleAdd}>Add Entry</button>
+      <div style={{ marginBottom: 20 }}>
+        <input
+          placeholder="Title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          style={{ marginRight: 10 }}
+        />
+        <input
+          placeholder="Body"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          style={{ marginRight: 10 }}
+        />
+        <button onClick={handleAddEntry}>Add Entry</button>
+      </div>
 
-      <h2>Your Entries</h2>
       {entries.map((entry) => (
-        <div
-          key={entry.id}
-          style={{ border: "1px solid #ccc", padding: 10, marginTop: 10 }}
-        >
+        <div key={entry.id} style={{ marginBottom: 20, borderBottom: "1px solid #ccc" }}>
           <h3>{entry.title}</h3>
           <p>{entry.body}</p>
           <small>{new Date(entry.createdAt).toLocaleString()}</small>
@@ -103,6 +113,3 @@ function Dashboard() {
     </div>
   );
 }
-
-export default withAuth(Dashboard);
-

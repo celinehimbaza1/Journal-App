@@ -1,53 +1,21 @@
-// pages/api/entries/[id].ts
-import type { NextApiRequest, NextApiResponse } from "next";
-import { getAuth } from "firebase-admin/auth";
-import { initializeApp, getApps, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+export default async function handler(req, res) {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
 
-if (!getApps().length) {
-  initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID!,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL!,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY!.replace(/\\n/g, "\n"),
-    }),
-  });
-}
-const db = getFirestore();
-
-async function verifyIdToken(token: string) {
-  const auth = getAuth();
-  try {
-    const decoded = await auth.verifyIdToken(token);
-    return decoded.uid;
-  } catch (err) {
-    return null;
-  }
-}
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: "Unauthorized" });
-
-  const token = authHeader.split(" ")[1];
-  const userId = await verifyIdToken(token);
-
-  if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
-  if (req.method !== "DELETE") {
-    res.setHeader("Allow", ["DELETE"]);
-    return res.status(405).end(`Method ${req.method} Not Allowed`);
-  }
-
+  const decoded = await verifyIdToken(token);
   const { id } = req.query;
 
-  const docRef = db.collection("entries").doc(id as string);
-  const doc = await docRef.get();
+  if (req.method === "DELETE") {
+    const docRef = db.collection("entries").doc(id as string);
+    const doc = await docRef.get();
 
-  if (!doc.exists || doc.data()?.userId !== userId) {
-    return res.status(404).json({ error: "Entry not found or unauthorized" });
+    if (!doc.exists || doc.data()?.userId !== decoded.uid) {
+      return res.status(403).json({ error: "Not allowed" });
+    }
+
+    await docRef.delete();
+    return res.status(200).json({ success: true });
   }
 
-  await docRef.delete();
-  res.status(204).end();
+  return res.status(405).json({ error: "Method not allowed" });
 }

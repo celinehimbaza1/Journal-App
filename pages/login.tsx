@@ -3,7 +3,8 @@ import { useContext, useEffect } from "react";
 import { auth, provider } from "../lib/firebase";
 import { signInWithPopup } from "firebase/auth";
 import { useRouter } from "next/router";
-import { AuthContext } from "./_app";
+import { AuthContext } from "../lib/AuthContext"; 
+
 
 export default function Login() {
   const user = useContext(AuthContext);

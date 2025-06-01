@@ -1,20 +1,17 @@
 // pages/_app.tsx
 import "../styles/globals.css";
 import type { AppProps } from "next/app";
-import { useEffect, useState, createContext, ReactNode } from "react";
-import { auth } from "../lib/firebase";
+import { useEffect, useState } from "react";
 import { onAuthStateChanged, User } from "firebase/auth";
-
-export const AuthContext = createContext<User | null>(null);
+import { auth } from "../lib/firebase";
+import { AuthContext } from "../lib/AuthContext";
 
 function MyApp({ Component, pageProps }: AppProps) {
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-    });
-    return unsubscribe;
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
   }, []);
 
   return (
